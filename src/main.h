@@ -3,7 +3,9 @@ void myDelay(long delay);
 
 void showImage();
 void showBitmapFrom_HTTP(const char* host, const char* path, const char* filename, int16_t x, int16_t y, bool with_color);
-void showBitmapFrom_HTTP_simple(const char* host, const char* path, const char* filename, int16_t x, int16_t y, bool with_color);
+void showBitmapBufferFrom_HTTP(const char* host, const char* path, const char* filename, int16_t x, int16_t y, bool with_color);
+void showXBMFrom_HTTP(const char* host, const char* path, const char* filename, int16_t x, int16_t y, bool with_color);
+void showBitmapDirectFrom_HTTP(const char* host, const char* path, const char* filename, int16_t x, int16_t y, bool with_color);
 uint32_t read32(WiFiClient& client);
 uint16_t read16(WiFiClient& client);
 uint32_t skip(WiFiClient& client, int32_t bytes);
