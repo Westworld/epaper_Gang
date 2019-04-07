@@ -130,7 +130,7 @@ void showImage() {
   int16_t w2 = display.width() / 2;
   int16_t h2 = display.height() / 2;
   //showBitmapFrom_HTTP("www.squix.org", "/blog/wunderground/", "chanceflurries.bmp", w2 - 50, h2 - 50, false);
-showBitmapFrom_HTTP("192.168.0.34", "/4DAction/", logString, 0,0, false);
+  showBitmapFrom_HTTP_simple("192.168.0.34", "/4DAction/", logString, 0,0, false);
 
     myDelay(60000);
 }
@@ -254,6 +254,7 @@ void showBitmapFrom_HTTP(const char* host, const char* path, const char* filenam
       // BMP rows are padded (if needed) to 4-byte boundary
       uint32_t rowSize = (width * depth / 8 + 3) & ~3;
       if (depth < 8) rowSize = ((width * depth + 8 - depth) / 8 + 3) & ~3;
+
       if (height < 0)
       {
         height = -height;
@@ -422,6 +423,111 @@ void showBitmapFrom_HTTP(const char* host, const char* path, const char* filenam
   }
 }
 
+
+void showXBMFrom_HTTP(const char* host, const char* path, const char* filename, int16_t x, int16_t y, bool with_color)
+{
+  display.setRotation(0);
+  WiFiClient client;
+  bool connection_ok = false;
+  bool valid = false; // valid format to be handled
+  bool flip = true; // bitmap is stored bottom-to-top
+  uint32_t startTime = millis();
+  Serial.println(); Serial.print("downloading file \""); Serial.print(filename);  Serial.println("\"");
+  Serial.print("connecting to "); Serial.println(host);
+  if (!client.connect(host, httpPort))
+  {
+    Serial.println("connection failed");
+    return;
+  }
+  Serial.print("requesting URL: ");
+  Serial.println(String("http://") + host + path + filename);
+  client.print(String("GET ") + path + filename + " HTTP/1.1\r\n" +
+               "Host: " + host + "\r\n" +
+               "User-Agent: GxEPD2_Spiffs_Loader\r\n" +
+               "Connection: close\r\n\r\n");
+  Serial.println("request sent");
+  myDelay(3000);
+  if ((x >= display.width()) || (y >= display.height())) return;
+  while (client.connected())
+  {
+    String line = client.readStringUntil('\n');
+    if (!connection_ok)
+    {
+      connection_ok = line.startsWith("HTTP/1.1 200 OK");
+      if (connection_ok) Serial.println(line);
+      //if (!connection_ok) Serial.println(line);
+    }
+    if (!connection_ok) Serial.println(line);
+    //Serial.println(line);
+    if (line == "\r")
+    {
+      Serial.println("headers received");
+      break;
+    }
+  }
+  if (!connection_ok) return;
+  // Parse BMP header
+  uint16_t result = read16(client);
+  if (result == 0x4D42) // BMP signature
+  {
+    uint32_t fileSize = read32(client);
+    uint32_t creatorBytes = read32(client);
+    uint32_t imageOffset = read32(client); // Start of image data
+    uint32_t headerSize = read32(client);
+    uint32_t width  = read32(client);
+    uint32_t height = read32(client);
+    uint16_t planes = read16(client);
+    uint16_t depth = read16(client); // bits per pixel
+    uint32_t format = read32(client);
+    uint32_t pictsize = read32(client);
+    uint32_t bytes_read = 8 * 4 + 3 * 2; // read so far
+    if ((planes == 1) && ((format == 0) || (format == 3))) // uncompressed is handled, 565 also
+    {
+      Serial.print("File size: "); Serial.println(fileSize);
+      Serial.print("Image Offset: "); Serial.println(imageOffset);
+      Serial.print("Header size: "); Serial.println(headerSize);
+      Serial.print("Bit Depth: "); Serial.println(depth);
+      Serial.print("Format: "); Serial.println(format);
+      Serial.print("Pict size: "); Serial.println(pictsize);
+      Serial.print("Image size: ");
+      Serial.print(width);
+      Serial.print('x');
+      Serial.println(height);
+     
+      // BMP rows are padded (if needed) to 4-byte boundary
+      uint32_t rowSize = (width * depth / 8 + 3) & ~3;
+      if (depth < 8) rowSize = ((width * depth + 8 - depth) / 8 + 3) & ~3;
+
+      if (pictsize >= 16000) return;
+
+      bytes_read += skip(client, imageOffset - bytes_read);
+
+      Serial.print("Start reading at: "); Serial.println(bytes_read);
+
+      bytes_read += read(client, bmpbuffer, pictsize);
+      Serial.print("bytes read "); Serial.println(bytes_read);
+
+      display.firstPage();
+      do
+      {
+        display.fillScreen(GxEPD_WHITE);
+        display.drawBitmap(0, 0, bmpbuffer, display.width(), display.height(), GxEPD_BLACK);
+      }
+      while (display.nextPage());
+            
+      
+    }
+  }
+  else
+  {
+    char message[100];
+    sprintf(message,"Wrong signature %d",result);
+    ReportError(message);
+  }
+  
+}
+
+
 void ReportError(char *errormessage) {
    Serial.println(errormessage);
   helloWorld(errormessage);
@@ -477,7 +583,23 @@ uint32_t read(WiFiClient& client, uint8_t* buffer, int32_t bytes)
       remain--;
     }
     else delay(1);
-    if (millis() - start > 2000) break; // don't hang forever
+    if (millis() - start > 5000) {
+      Serial.println("Stop because timeout "); 
+      break; // don't hang forever
+    }
   }
+
+  if (remain > 0) {
+      Serial.print("remain handling: "); Serial.println(remain);
+      while (client.available() && (remain > 0)) {
+        int16_t v = client.read();
+        *buffer++ = uint8_t(v);
+        remain--;
+      }
+  }
+
+  Serial.print("requested: "); Serial.println(bytes);
+  Serial.print("remain: "); Serial.println(remain);
+
   return bytes - remain;
 }
