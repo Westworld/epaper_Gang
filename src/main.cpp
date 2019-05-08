@@ -4,15 +4,15 @@ Nodemcu ESP 8266 mit 4.2 inch Waveshare SPI e-paper
 für Gang Stromanzeige
 
  * 4.2inch Display Nodemcu
+ * // BUSY -> D2, RST -> D4, DC -> D3, CS -> D1, CLK -> D5, DIN -> D7, GND -> GND, 3.3V -> 3.3V   +++
 BUSY  D2
-RST D4  - D4, ist TXT? D1?
-DC  D3  - D3? das ist flash! gpio 0 - D6 stattdessen?
-CS  D8
+RST D4
+DC  D3 
+CS  D1
 CLK D5
 DIN D7
 GND GND
 3.3V  3V3
-
  */
 
 #include <Arduino.h>
@@ -23,12 +23,12 @@ GND GND
 #include <ESP8266HTTPClient.h>
 #include <ArduinoOTA.h>
 #include <Console.h>
-#include <OneWire.h>
-#include <DallasTemperature.h>
+//#include <OneWire.h>
+//#include <DallasTemperature.h>
 
 #include "main.h"
 
-GxEPD2_BW<GxEPD2_420, GxEPD2_420::HEIGHT> display(GxEPD2_420(/*CS=D8*/ D8, /*DC=D3*/ D3, /*RST=D4*/ D1, /*BUSY=D2*/ D2));
+GxEPD2_BW<GxEPD2_420, GxEPD2_420::HEIGHT> display(GxEPD2_420(/*CS=D8*/ D1, /*DC=D3*/ D3, /*RST=D4*/ D4, /*BUSY=D2*/ D2));
 
 //GxIO_Class io(SPI, /*CS=D8*/ SS, /*DC=D3*/ 0, /*RST=D4*/ 2); // arbitrary selection of D3(=0), D4(=2), selected for default of GxEPD_Class
 //GxEPD_Class display(io, /*RST=D4*/ 2, /*BUSY=D2*/ 4); // default selection of D4(=2), D2(=4)
@@ -38,10 +38,10 @@ const int httpPort  = 8000;
 
 uint8_t bmpbuffer[16000];  // Bildbuffer
 
-#define ONE_WIRE_BUS D1
-OneWire oneWire(ONE_WIRE_BUS);
+//#define ONE_WIRE_BUS D1
+//OneWire oneWire(ONE_WIRE_BUS);
 // Pass our oneWire reference to Dallas Temperature. 
-DallasTemperature sensors(&oneWire);
+//DallasTemperature sensors(&oneWire);
 
 void setup()
 {
@@ -118,12 +118,12 @@ void loop()
 
 void showImage() {
       char logString[64];
-      sensors.requestTemperatures();
-      float temp = sensors.getTempCByIndex(0);
-      int temp2 = temp*10;
+      //sensors.requestTemperatures();
+      //float temp = sensors.getTempCByIndex(0);
+      int temp2 = 0; //temp*10;
       Serial.print("temp: ");
   
-    sprintf(logString,"Strom?Job=GangBitmap&temp=%f", temp);
+    sprintf(logString,"Strom?Job=GangBitmap&temp=%f", temp2);
     showBitmapBufferFrom_HTTP("192.168.0.34", "/4DAction/", logString, 0,0, false);
 
     myDelay(60000);
@@ -147,7 +147,7 @@ void myDelay(long thedelay) {
 
 }
 
-void helloWorld(char *HelloWorld)
+void helloWorld(const char *HelloWorld)
 {
   //Serial.println("helloWorld");
   display.setRotation(0);
