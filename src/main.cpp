@@ -3,7 +3,7 @@
 Nodemcu ESP 8266 mit 4.2 inch Waveshare SPI e-paper
 für Gang Stromanzeige
 
- * 4.2inch Display Nodemcu
+ * 4.2inch Display wemos mini
  * // BUSY -> D2, RST -> D4, DC -> D3, CS -> D1, CLK -> D5, DIN -> D7, GND -> GND, 3.3V -> 3.3V   +++
 BUSY  D2
 RST D4
@@ -23,13 +23,13 @@ GND GND
 #include <ESP8266HTTPClient.h>
 #include <ArduinoOTA.h>
 #include <Console.h>
-//#include <OneWire.h>
-//#include <DallasTemperature.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
 
 #include "main.h"
 
-GxEPD2_BW<GxEPD2_420, GxEPD2_420::HEIGHT> display(GxEPD2_420(/*CS=D8*/ D1, /*DC=D3*/ D3, /*RST=D4*/ D4, /*BUSY=D2*/ D2));
-
+GxEPD2_BW<GxEPD2_420, GxEPD2_420::HEIGHT> display(GxEPD2_420(/*CS=D8*/ D8, /*DC=D3*/ D3, /*RST=D4*/ D4, /*BUSY=D2*/ D2));
+// d1 statt D8 geht
 //GxIO_Class io(SPI, /*CS=D8*/ SS, /*DC=D3*/ 0, /*RST=D4*/ 2); // arbitrary selection of D3(=0), D4(=2), selected for default of GxEPD_Class
 //GxEPD_Class display(io, /*RST=D4*/ 2, /*BUSY=D2*/ 4); // default selection of D4(=2), D2(=4)
 
@@ -38,10 +38,12 @@ const int httpPort  = 8000;
 
 uint8_t bmpbuffer[16000];  // Bildbuffer
 
-//#define ONE_WIRE_BUS D1
-//OneWire oneWire(ONE_WIRE_BUS);
+#define ONE_WIRE_BUS D1
+OneWire oneWire(ONE_WIRE_BUS);
 // Pass our oneWire reference to Dallas Temperature. 
-//DallasTemperature sensors(&oneWire);
+DallasTemperature sensors(&oneWire);
+
+bool Bewegung=false;
 
 void setup()
 {
@@ -103,42 +105,52 @@ void setup()
 
 
     ArduinoOTA.begin();
-
+    sensors.begin();
+    pinMode(A0, INPUT);
     helloWorld("Starte");
 }
 
 void loop()
 {
-  ArduinoOTA.handle();
-
   showImage();
 
-  myDelay(1000);
+  myDelay(60000);
 }
 
 void showImage() {
       char logString[64];
-      //sensors.requestTemperatures();
-      //float temp = sensors.getTempCByIndex(0);
-      int temp2 = 0; //temp*10;
+      sensors.requestTemperatures();
+      float temp = sensors.getTempCByIndex(0);
+      int temp2 = temp*10;
       Serial.print("temp: ");
+      Serial.println(temp);
   
-    sprintf(logString,"Strom?Job=GangBitmap&temp=%f", temp2);
+    sprintf(logString,"Strom?Job=GangBitmap&temp=%f", temp);
     showBitmapBufferFrom_HTTP("192.168.0.34", "/4DAction/", logString, 0,0, false);
 
-    myDelay(60000);
 }
 
 
 
 void myDelay(long thedelay) {
   unsigned long start = millis();
+  float raw;
+  bool BewegAktiv=false;
 
   while ((start+thedelay)>millis()) {
 
     ArduinoOTA.handle();
 
     delay(1);
+    raw = analogRead(A0);
+    BewegAktiv=false;
+    if (raw > 700)
+      BewegAktiv=true;
+    if (BewegAktiv != Bewegung) {
+        Bewegung = BewegAktiv;
+        showPartialUpdate(Bewegung);
+        ReportBewegung(Bewegung);
+    }  
 
     if (start > millis()) {
       start = 0;  // overflow
@@ -179,6 +191,49 @@ uint8_t mono_palette_buffer[max_palette_pixels / 8]; // palette buffer for depth
 uint8_t color_palette_buffer[max_palette_pixels / 8]; // palette buffer for depth <= 8 c/w
 
 
+void showPartialUpdate(bool Bewegung)
+{
+  uint16_t box_x = 5;
+  uint16_t box_y = 5;
+  uint16_t box_w = 15;
+  uint16_t box_h = 15;
+  uint16_t cursor_y = box_y + box_h - 6;
+  float value = 13.95;
+  uint16_t incr = display.epd2.hasFastPartialUpdate ? 1 : 3;
+  display.setFont(&FreeMonoBold9pt7b);
+  display.setTextColor(GxEPD_BLACK);
+
+    display.setPartialWindow(box_x, box_y, box_w, box_h);
+    display.firstPage();
+    do
+    {
+      if (Bewegung)
+        display.fillRect(box_x, box_y, box_w, box_h, GxEPD_BLACK);
+      else
+        display.fillRect(box_x, box_y, box_w, box_h, GxEPD_WHITE);  
+    }
+    while (display.nextPage());
+  
+}
+
+void ReportBewegung(short Bewegung) {
+  char logString[64];
+  WiFiClient client;
+  bool connection_ok = false;
+  sprintf(logString,"/4DAction/Strom?Job=GangBewegung&Bewewegung=%d", Bewegung);
+  Serial.println(logString);
+
+  if (!client.connect("192.168.0.34", httpPort))
+  {
+    Serial.println("connection failed");
+    return;
+  }
+  client.print(String("GET ") + logString + " HTTP/1.1\r\n" +
+               "Host: " + "192.168.0.34" + "\r\n" +
+               "User-Agent: GxEPD2_Spiffs_Loader\r\n" +
+               "Connection: close\r\n\r\n");
+
+}
 
 void showBitmapBufferFrom_HTTP(const char* host, const char* path, const char* filename, int16_t x, int16_t y, bool with_color)
 {
@@ -406,6 +461,7 @@ void showBitmapBufferFrom_HTTP(const char* host, const char* path, const char* f
         Serial.println(" ms");
 
         //display.refresh();
+        display.setFullWindow();
         display.firstPage();
       do
       {
