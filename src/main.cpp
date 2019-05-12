@@ -8,12 +8,19 @@ für Gang Stromanzeige
 BUSY  D2
 RST D4
 DC  D3 
-CS  D1
+CS  D8  -  pulldown 4.7k auf Masse !!!
 CLK D5
 DIN D7
 GND GND
 3.3V  3V3
+
+
+Dallas Temp auf D1
+Bewegungssensor auf A0
+
  */
+
+
 
 #include <Arduino.h>
 #include <GxEPD2_BW.h>
@@ -29,9 +36,6 @@ GND GND
 #include "main.h"
 
 GxEPD2_BW<GxEPD2_420, GxEPD2_420::HEIGHT> display(GxEPD2_420(/*CS=D8*/ D8, /*DC=D3*/ D3, /*RST=D4*/ D4, /*BUSY=D2*/ D2));
-// d1 statt D8 geht
-//GxIO_Class io(SPI, /*CS=D8*/ SS, /*DC=D3*/ 0, /*RST=D4*/ 2); // arbitrary selection of D3(=0), D4(=2), selected for default of GxEPD_Class
-//GxEPD_Class display(io, /*RST=D4*/ 2, /*BUSY=D2*/ 4); // default selection of D4(=2), D2(=4)
 
 const char* wifihostname = "ESP_Epaper";
 const int httpPort  = 8000;
