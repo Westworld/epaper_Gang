@@ -220,7 +220,7 @@ void ReportBewegung(short Bewegung) {
   char logString[64];
   WiFiClient client;
   bool connection_ok = false;
-  sprintf(logString,"/4DAction/Strom?Job=GangBewegung&Bewewegung=%d", Bewegung);
+  sprintf(logString,"/4DAction/Strom?Job=GangBewegung&Bewegung=%d", Bewegung);
   Serial.println(logString);
 
   if (!client.connect("192.168.0.34", httpPort))
