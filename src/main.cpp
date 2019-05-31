@@ -42,6 +42,8 @@ const int httpPort  = 8000;
 
 uint8_t bmpbuffer[16000];  // Bildbuffer
 
+short RedrawCounter = 0;
+
 #define ONE_WIRE_BUS D1
 OneWire oneWire(ONE_WIRE_BUS);
 // Pass our oneWire reference to Dallas Temperature. 
@@ -118,7 +120,7 @@ void loop()
 {
   showImage();
 
-  myDelay(60000);
+  myDelay(55000);
 }
 
 void showImage() {
@@ -181,6 +183,8 @@ void helloWorld(const char *HelloWorld)
   
   while (display.nextPage());
   //Serial.println("helloWorld done");
+
+  display.powerOff();
 }
 
 static const uint16_t input_buffer_pixels = 640; // may affect performance
@@ -465,7 +469,14 @@ void showBitmapBufferFrom_HTTP(const char* host, const char* path, const char* f
         Serial.println(" ms");
 
         //display.refresh();
-        display.setFullWindow();
+
+        if (RedrawCounter++ > 15) {
+             display.setFullWindow();
+             RedrawCounter = 0;
+        }
+        else
+          display.setPartialWindow(0, 0, display.width(), display.height());
+
         display.firstPage();
       do
       {
@@ -473,7 +484,8 @@ void showBitmapBufferFrom_HTTP(const char* host, const char* path, const char* f
         display.drawBitmap(0, 0, bmpbuffer, display.width(), display.height(), GxEPD_WHITE);
       }
       while (display.nextPage());
-      display.powerOff();
+
+      
       }
       Serial.print("bytes read "); Serial.println(bytes_read);
     }
@@ -489,6 +501,7 @@ void showBitmapBufferFrom_HTTP(const char* host, const char* path, const char* f
   {
     ReportError("bitmap format not handled.");
   }
+  display.powerOff();
 }
 
 void ReportError(char *errormessage) {
