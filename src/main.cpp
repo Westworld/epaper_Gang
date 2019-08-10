@@ -120,7 +120,7 @@ void loop()
 {
   showImage();
 
-  myDelay(55000);
+  delay(55000);  // myDelay für Bewegungsmelder
 }
 
 void showImage() {
@@ -179,6 +179,23 @@ void helloWorld(const char *HelloWorld)
   display.firstPage();
   display.fillScreen(GxEPD_WHITE);
   display.setCursor(x, y);
+  display.print(HelloWorld);
+  
+  while (display.nextPage());
+  //Serial.println("helloWorld done");
+
+  display.powerOff();
+}
+
+void ShowError(const char *HelloWorld)
+{
+  display.setRotation(90);
+  display.setFont(&FreeMonoBold9pt7b);
+  display.setTextColor(GxEPD_BLACK);
+  display.setPartialWindow(0, 0, display.width(), 20);
+  display.firstPage();
+  display.fillScreen(GxEPD_WHITE);
+  display.setCursor(5, 10);
   display.print(HelloWorld);
   
   while (display.nextPage());
@@ -505,8 +522,8 @@ void showBitmapBufferFrom_HTTP(const char* host, const char* path, const char* f
 }
 
 void ReportError(char *errormessage) {
-   Serial.println(errormessage);
-  helloWorld(errormessage);
+  Serial.println(errormessage);
+  ShowError(errormessage);
 }
 
 uint16_t read16(WiFiClient& client)
