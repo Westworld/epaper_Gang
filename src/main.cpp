@@ -18,9 +18,15 @@ GND GND
 Dallas Temp auf D1
 Bewegungssensor auf A0
 
+für zweites Display ohne Temp und ohne Bewegungssensor
+CS auf D1
+#define Gang 1
+oder
+#define Gang2 1
+
  */
 
-
+#define Gang2 1
 
 #include <Arduino.h>
 #include <GxEPD2_BW.h>
@@ -30,24 +36,36 @@ Bewegungssensor auf A0
 #include <ESP8266HTTPClient.h>
 #include <ArduinoOTA.h>
 #include <Console.h>
-#include <OneWire.h>
-#include <DallasTemperature.h>
+
 
 #include "main.h"
 
+
+#ifdef Gang
 GxEPD2_BW<GxEPD2_420, GxEPD2_420::HEIGHT> display(GxEPD2_420(/*CS=D8*/ D8, /*DC=D3*/ D3, /*RST=D4*/ D4, /*BUSY=D2*/ D2));
 
 const char* wifihostname = "ESP_Epaper";
+const char* jobname = "GangBitmap";
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#define ONE_WIRE_BUS D1
+OneWire oneWire(ONE_WIRE_BUS);
+// Pass our oneWire reference to Dallas Temperature. 
+DallasTemperature sensors(&oneWire);
+#else
+GxEPD2_BW<GxEPD2_420, GxEPD2_420::HEIGHT> display(GxEPD2_420(/*CS=D8*/ D1, /*DC=D3*/ D3, /*RST=D4*/ D4, /*BUSY=D2*/ D2));
+
+const char* wifihostname = "ESP_Epaper2";
+const char* jobname = "epaper";
+#endif
+
 const int httpPort  = 8000;
 
 uint8_t bmpbuffer[16000];  // Bildbuffer
 
 short RedrawCounter = 0;
 
-#define ONE_WIRE_BUS D1
-OneWire oneWire(ONE_WIRE_BUS);
-// Pass our oneWire reference to Dallas Temperature. 
-DallasTemperature sensors(&oneWire);
+
 
 bool Bewegung=false;
 
@@ -56,8 +74,12 @@ void setup()
   Serial.begin(115200);
   Serial.println();
   Serial.println("setup");
+delay(1000);
+  display.init(115200); //  115200 for diagnostic output
 
-  display.init(115200); // enable diagnostic output on Serial
+    display.setRotation(1);
+  
+
 
   Serial.println("setup done");
 
@@ -111,8 +133,11 @@ void setup()
 
 
     ArduinoOTA.begin();
+
+    #ifdef Gang
     sensors.begin();
     pinMode(A0, INPUT);
+    #endif
     helloWorld("Starte");
 }
 
@@ -125,13 +150,17 @@ void loop()
 
 void showImage() {
       char logString[64];
+    #ifdef Gang
       sensors.requestTemperatures();
       float temp = sensors.getTempCByIndex(0);
-      int temp2 = temp*10;
       Serial.print("temp: ");
       Serial.println(temp);
-  
-    sprintf(logString,"Strom?Job=GangBitmap&temp=%f", temp);
+      sprintf(logString,"Strom?Job=%s&temp=%f", jobname, temp);
+  #else
+  sprintf(logString,"Strom?Job=%s", jobname);    
+  #endif
+
+    
     showBitmapBufferFrom_HTTP("192.168.0.34", "/4DAction/", logString, 0,0, false);
 
 }
@@ -148,6 +177,7 @@ void myDelay(long thedelay) {
     ArduinoOTA.handle();
 
     delay(1);
+    #ifdef Gang
     raw = analogRead(A0);
     BewegAktiv=false;
     if (raw > 700)
@@ -157,7 +187,7 @@ void myDelay(long thedelay) {
         showPartialUpdate(Bewegung);
         ReportBewegung(Bewegung);
     }  
-
+    #endif
     if (start > millis()) {
       start = 0;  // overflow
     }
@@ -241,6 +271,7 @@ void showPartialUpdate(bool Bewegung)
   
 }
 
+// not called for Gang2
 void ReportBewegung(short Bewegung) {
   char logString[64];
   WiFiClient client;
