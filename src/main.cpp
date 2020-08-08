@@ -5,28 +5,34 @@ für Gang Stromanzeige
 
  * 4.2inch Display wemos mini
  * // BUSY -> D2, RST -> D4, DC -> D3, CS -> D1, CLK -> D5, DIN -> D7, GND -> GND, 3.3V -> 3.3V   +++
-BUSY  D2
-RST D4
-DC  D3 
-CS  D8  -  pulldown 4.7k auf Masse !!!
-CLK D5
-DIN D7
+BUSY  D2 gpIO4
+RST D4 GPIO2
+DC  D3 GPIO0
+CS  D8 gpio15 -  pulldown 4.7k auf Masse !!!
+CLK D5-GPIO14
+DIN D7-GPIO13
 GND GND
 3.3V  3V3
 
-
-Dallas Temp auf D1
+Dallas Temp auf D1  gpIO5
 Bewegungssensor auf A0
+
+D1-GPIO5  Trig als Output?  D0 geht nicht...
+D6 gpiO12  Echo frei verwendbar
+
+
+
 
 für zweites Display ohne Temp und ohne Bewegungssensor
 CS auf D1
 #define Gang 1
 oder
 #define Gang2 1
+oder Gang3 1  // für gang mit temp und ultraschall
 
  */
 
-#define Gang2 1
+#define Gang3 1
 
 #include <Arduino.h>
 #include <GxEPD2_BW.h>
@@ -52,11 +58,27 @@ const char* jobname = "GangBitmap";
 OneWire oneWire(ONE_WIRE_BUS);
 // Pass our oneWire reference to Dallas Temperature. 
 DallasTemperature sensors(&oneWire);
-#else
+#endif
+#ifdef Gang2
 GxEPD2_BW<GxEPD2_420, GxEPD2_420::HEIGHT> display(GxEPD2_420(/*CS=D8*/ D1, /*DC=D3*/ D3, /*RST=D4*/ D4, /*BUSY=D2*/ D2));
-
 const char* wifihostname = "ESP_Epaper2";
 const char* jobname = "epaper";
+
+#endif
+
+#ifdef Gang3
+GxEPD2_BW<GxEPD2_420, GxEPD2_420::HEIGHT> display(GxEPD2_420(/*CS=D8*/ D8, /*DC=D3*/ D3, /*RST=D4*/ D4, /*BUSY=D2*/ D2));
+
+const char* wifihostname = "ESP_Epaper3";
+const char* jobname = "GangBitmap";
+/* #include <OneWire.h>
+#include <DallasTemperature.h>
+#define ONE_WIRE_BUS D1
+OneWire oneWire(ONE_WIRE_BUS);
+// Pass our oneWire reference to Dallas Temperature. 
+DallasTemperature sensors(&oneWire); */
+const int trigPin = D1; //A2;
+const int echoPin = D6; // A3;
 #endif
 
 const int httpPort  = 8000;
@@ -68,6 +90,7 @@ short RedrawCounter = 0;
 
 
 bool Bewegung=false;
+float LastDistance=0;
 
 void setup()
 {
@@ -75,15 +98,15 @@ void setup()
   Serial.println();
   Serial.println("setup");
 delay(1000);
-  display.init(115200); //  115200 for diagnostic output
+  display.init();// 115200); //  115200 for diagnostic output
 
     display.setRotation(1);
-  
+    helloWorld("Starte Network");
 
 
   Serial.println("setup done");
 
-  Console::info("Connecting to SSID %s", WIFI_SSID);
+    Console::info("Connecting to SSID %s", WIFI_SSID);
     WiFi.hostname(wifihostname);  
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASS);
@@ -97,12 +120,13 @@ delay(1000);
 
     Console::info("WiFi connected");
     IPAddress ip = WiFi.localIP();
-    Console::info("IP Address: %u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]); 
-
+    Console::fatal("IP Address: %u.%u.%u.%u", ip[0], ip[1], ip[2], ip[3]); 
+    helloWorld("WLAN connected");
     ArduinoOTA.setHostname(wifihostname);  
     
   ArduinoOTA.onStart([]() {
     if (ArduinoOTA.getCommand() == U_FLASH) {
+      helloWorld("Uploading Firmware");
       Console::info("Start updating sketch");
     } else { // U_SPIFFS
       Console::info("Start updating filesystem - unsupported?");
@@ -138,14 +162,23 @@ delay(1000);
     sensors.begin();
     pinMode(A0, INPUT);
     #endif
-    helloWorld("Starte");
+    #ifdef Gang3
+    //sensors.begin();
+    pinMode(trigPin, OUTPUT);
+    pinMode(echoPin, INPUT);   
+    #endif
+
 }
 
 void loop()
 {
   showImage();
 
+#ifdef Gang3
+  myDelay(55000);
+#else
   delay(55000);  // myDelay für Bewegungsmelder
+#endif  
 }
 
 void showImage() {
@@ -156,8 +189,17 @@ void showImage() {
       Serial.print("temp: ");
       Serial.println(temp);
       sprintf(logString,"Strom?Job=%s&temp=%f", jobname, temp);
-  #else
-  sprintf(logString,"Strom?Job=%s", jobname);    
+  #endif
+  #ifdef Gang3
+     /*  sensors.requestTemperatures();
+      float temp = sensors.getTempCByIndex(0);
+      Serial.print("temp: ");
+      Serial.println(temp); */
+      //sprintf(logString,"Strom?Job=%s&temp=%f&distance=%f", jobname, temp, LastDistance);
+     sprintf(logString,"Strom?Job=%s&distance=%f", jobname, LastDistance);
+  #endif
+  #ifdef Gang2
+      sprintf(logString,"Strom?Job=%s", jobname);    
   #endif
 
     
@@ -172,6 +214,7 @@ void myDelay(long thedelay) {
   float raw;
   bool BewegAktiv=false;
 
+
   while ((start+thedelay)>millis()) {
 
     ArduinoOTA.handle();
@@ -185,13 +228,88 @@ void myDelay(long thedelay) {
     if (BewegAktiv != Bewegung) {
         Bewegung = BewegAktiv;
         showPartialUpdate(Bewegung);
-        ReportBewegung(Bewegung);
+        ReportBewegung(Bewegung, 0);
     }  
     #endif
+    #ifdef Gang3
+    
+    raw = GetDistance();
+    LastDistance = raw;
+
+    if (raw > 5)  {
+      if (raw <80 )
+        BewegAktiv=true;
+      else
+        BewegAktiv=false;
+
+       char error[50];
+       sprintf(error, "%d", (long) raw);
+       ShowError(error);
+
+      if (BewegAktiv != Bewegung) {
+          //Serial.println(raw);
+          Bewegung = BewegAktiv;
+          showPartialUpdate(Bewegung);
+          //ReportBewegung(Bewegung, (long) raw);
+      }  
+    }
+    
+    #endif    
     if (start > millis()) {
       start = 0;  // overflow
     }
   }
+
+}
+
+
+float GetDistance() {
+  float duration, cm, average, result;
+  short counter = 0;
+  const short samples = 100;
+  float collection[samples];
+  
+  while (counter<samples) {
+      digitalWrite(trigPin, LOW);
+      delayMicroseconds(5);
+      digitalWrite(trigPin, HIGH);
+      delayMicroseconds(10);
+      digitalWrite(trigPin, LOW);
+
+      // Read the signal from the sensor: a HIGH pulse whose
+      // duration is the time (in microseconds) from the sending
+      // of the ping to the reception of its echo off of an object.
+      pinMode(echoPin, INPUT);
+      noInterrupts();
+      duration = pulseIn(echoPin, HIGH);
+      interrupts();
+      //With measured time we calculate the distance in cm:
+      cm = (duration/2) * 0.034;
+      collection[counter++] = cm;
+      delay(0);
+      yield();
+  }
+
+  // durchschnitt ermitteln, dabei addieren und mitzählen
+   duration = 0;
+  for (short i=0;i<samples;i++) {
+    duration += collection[i];
+  }
+  average = duration/samples;
+
+  duration = 0;
+  counter = 0;
+  for (short i=0;i<samples;i++) {
+    if (collection[i] < average) {
+      duration += collection[i];
+      counter++;
+    }  
+  }  
+
+  if (counter == 0) counter = 1;
+  result = duration / counter;
+
+  return result;
 
 }
 
@@ -217,15 +335,15 @@ void helloWorld(const char *HelloWorld)
   display.powerOff();
 }
 
-void ShowError(const char *HelloWorld)
+void ShowError(char *HelloWorld)
 {
   display.setRotation(90);
   display.setFont(&FreeMonoBold9pt7b);
   display.setTextColor(GxEPD_BLACK);
-  display.setPartialWindow(0, 0, display.width(), 20);
+  display.setPartialWindow(50, 0, display.width(), 20);
   display.firstPage();
   display.fillScreen(GxEPD_WHITE);
-  display.setCursor(5, 10);
+  display.setCursor(55, 10);
   display.print(HelloWorld);
   
   while (display.nextPage());
@@ -272,11 +390,11 @@ void showPartialUpdate(bool Bewegung)
 }
 
 // not called for Gang2
-void ReportBewegung(short Bewegung) {
+void ReportBewegung(short Bewegung, long distance) {
   char logString[64];
   WiFiClient client;
   bool connection_ok = false;
-  sprintf(logString,"/4DAction/Strom?Job=GangBewegung&Bewegung=%d", Bewegung);
+  sprintf(logString,"/4DAction/Strom?Job=GangBewegung&Bewegung=%d&distance=%d", Bewegung, distance);
   Serial.println(logString);
 
   if (!client.connect("192.168.0.34", httpPort))
@@ -313,7 +431,7 @@ void showBitmapBufferFrom_HTTP(const char* host, const char* path, const char* f
                "User-Agent: GxEPD2_Spiffs_Loader\r\n" +
                "Connection: close\r\n\r\n");
   Serial.println("request sent");
-  myDelay(3000);
+  delay(3000);
   if ((x >= display.width()) || (y >= display.height())) return;
   while (client.connected())
   {
@@ -325,13 +443,16 @@ void showBitmapBufferFrom_HTTP(const char* host, const char* path, const char* f
       //if (!connection_ok) Serial.println(line);
     }
     if (!connection_ok) Serial.println(line);
-    //Serial.println(line);
+      //Serial.println(line);
     if (line == "\r")
     {
       Serial.println("headers received");
       break;
     }
   }
+
+  // data received
+  //Serial.println("data received");
   if (!connection_ok) return;
   // Parse BMP header
   uint16_t result = read16(client);

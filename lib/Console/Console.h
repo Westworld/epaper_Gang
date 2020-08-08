@@ -18,7 +18,7 @@ typedef enum
 class Console
 {
 public:
-    static const ConsoleLogLevel logLevel = DEBUG;
+    static const ConsoleLogLevel logLevel = FATAL;
 
     static void begin(int baudRate=115200);
     static char *debug(const char *format, ...);
