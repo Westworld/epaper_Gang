@@ -28,7 +28,7 @@ CS auf D1
 #define Gang 1
 oder
 #define Gang2 1
-oder Gang3 1  // für gang mit temp und ultraschall
+oder Gang3 1  // für gang mit temp und ultraschall HC-SR204
 
  */
 
@@ -71,12 +71,11 @@ GxEPD2_BW<GxEPD2_420, GxEPD2_420::HEIGHT> display(GxEPD2_420(/*CS=D8*/ D8, /*DC=
 
 const char* wifihostname = "ESP_Epaper3";
 const char* jobname = "GangBitmap";
-/* #include <OneWire.h>
-#include <DallasTemperature.h>
-#define ONE_WIRE_BUS D1
-OneWire oneWire(ONE_WIRE_BUS);
-// Pass our oneWire reference to Dallas Temperature. 
-DallasTemperature sensors(&oneWire); */
+#include "DHT.h"
+#define DHTPIN RX     // Digital pin connected to the DHT sensor
+#define DHTTYPE DHT22
+DHT dht(DHTPIN, DHTTYPE);
+
 const int trigPin = D1; //A2;
 const int echoPin = D6; // A3;
 #endif
@@ -163,7 +162,7 @@ delay(1000);
     pinMode(A0, INPUT);
     #endif
     #ifdef Gang3
-    //sensors.begin();
+    dht.begin();
     pinMode(trigPin, OUTPUT);
     pinMode(echoPin, INPUT);   
     #endif
@@ -191,12 +190,11 @@ void showImage() {
       sprintf(logString,"Strom?Job=%s&temp=%f", jobname, temp);
   #endif
   #ifdef Gang3
-     /*  sensors.requestTemperatures();
-      float temp = sensors.getTempCByIndex(0);
-      Serial.print("temp: ");
-      Serial.println(temp); */
-      //sprintf(logString,"Strom?Job=%s&temp=%f&distance=%f", jobname, temp, LastDistance);
-     sprintf(logString,"Strom?Job=%s&distance=%f", jobname, LastDistance);
+    float h = dht.readHumidity();
+  // Read temperature as Celsius (the default)
+    float t = dht.readTemperature();
+    sprintf(logString,"Strom?Job=%s&temp=%f&hum=%f&distance=%f", jobname, t, h, LastDistance);
+    // sprintf(logString,"Strom?Job=%s&distance=%f", jobname, LastDistance);
   #endif
   #ifdef Gang2
       sprintf(logString,"Strom?Job=%s", jobname);    
@@ -266,7 +264,7 @@ void myDelay(long thedelay) {
 float GetDistance() {
   float duration, cm, average, result;
   short counter = 0;
-  const short samples = 100;
+  const short samples = 30;
   float collection[samples];
   
   while (counter<samples) {
@@ -286,8 +284,7 @@ float GetDistance() {
       //With measured time we calculate the distance in cm:
       cm = (duration/2) * 0.034;
       collection[counter++] = cm;
-      delay(0);
-      yield();
+      delay(50);  // mindest abstand zwischen zwei pings
   }
 
   // durchschnitt ermitteln, dabei addieren und mitzählen
