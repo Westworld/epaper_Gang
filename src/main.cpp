@@ -4,18 +4,19 @@ Nodemcu ESP 8266 mit 4.2 inch Waveshare SPI e-paper
 für Gang Stromanzeige
 
  * 4.2inch Display wemos mini
- * // BUSY -> D2, RST -> D4, DC -> D3, CS -> D1, CLK -> D5, DIN -> D7, GND -> GND, 3.3V -> 3.3V   +++
+ * // BUSY -> D2, RST -> D4, DC -> D3, CS -> D8, CLK -> D5, DIN -> D7, GND -> GND, 3.3V -> 3.3V   +++
 BUSY  D2 gpIO4
-RST D4 GPIO2
-DC  D3 GPIO0
-CS  D8 gpio15 -  pulldown 4.7k auf Masse !!!
-CLK D5-GPIO14
-DIN D7-GPIO13
-GND GND
+RST   D4 GPIO2
+DC    D3 GPIO0
+CS    D8 gpio15 -  pulldown 4.7k auf Masse !!!  -- bei Gang2 auf D1
+CLK   D5-GPIO14
+DIN   D7-GPIO13
+GND   GND
 3.3V  3V3
 
 Dallas Temp auf D1  gpIO5
 Bewegungssensor auf A0
+DHT22 auf RX GPI03
 
 D1-GPIO5  Trig als Output?  D0 geht nicht...
 D6 gpiO12  Echo frei verwendbar
@@ -76,8 +77,8 @@ const char* jobname = "GangBitmap";
 #define DHTTYPE DHT22
 DHT dht(DHTPIN, DHTTYPE);
 
-const int trigPin = D1; //A2;
-const int echoPin = D6; // A3;
+const int trigPin = D1; //GPIO5;
+const int echoPin = D6; // GPIO12;
 #endif
 
 const int httpPort  = 8000;
