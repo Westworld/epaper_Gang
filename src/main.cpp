@@ -21,7 +21,9 @@ DHT22 auf RX GPI03
 D1-GPIO5  Trig als Output?  D0 geht nicht...
 D6 gpiO12  Echo frei verwendbar
 
-
+alternativ US-100
+D1-GPIO5  US100_TX
+D6 gpiO12  US100_RX kein temp Sensor
 
 
 für zweites Display ohne Temp und ohne Bewegungssensor
@@ -34,7 +36,8 @@ oder Gang3 1  // für gang mit temp und ultraschall HC-SR204
  */
 
 #define Gang3 1
-
+#define US100 1
+// to switch from trigger to serial
 #include <Arduino.h>
 #include <GxEPD2_BW.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
@@ -72,13 +75,35 @@ GxEPD2_BW<GxEPD2_420, GxEPD2_420::HEIGHT> display(GxEPD2_420(/*CS=D8*/ D8, /*DC=
 
 const char* wifihostname = "ESP_Epaper3";
 const char* jobname = "GangBitmap";
+#ifndef US100
 #include "DHT.h"
 #define DHTPIN RX     // Digital pin connected to the DHT sensor
 #define DHTTYPE DHT22
 DHT dht(DHTPIN, DHTTYPE);
-
 const int trigPin = D1; //GPIO5;
 const int echoPin = D6; // GPIO12;
+#else
+#include <SoftwareSerial.h>
+#include <PingSerial.h>
+
+const int US100_TX = D1;
+const int US100_RX = D6;
+
+SoftwareSerial US100Serial(US100_RX, US100_TX);
+PingSerial us100(US100Serial, 10, 10000);  // Valid measurements are 650-1200mm
+
+bool ping_enabled = TRUE;
+unsigned int pingSpeed = 100; // How frequently are we going to send out a ping (in milliseconds). 50ms would be 20 times a second.
+unsigned long pingTimer = 0;     // Holds the next ping time.
+
+bool temp_enabled = TRUE;
+unsigned int tempSpeed = 3000;
+unsigned long tempTimer = 0;
+
+float lastTemp=0;
+#endif
+
+
 #endif
 
 const int httpPort  = 8000;
@@ -163,9 +188,13 @@ delay(1000);
     pinMode(A0, INPUT);
     #endif
     #ifdef Gang3
+    #ifndef US100
     dht.begin();
     pinMode(trigPin, OUTPUT);
     pinMode(echoPin, INPUT);   
+    #else
+      us100.begin();
+    #endif
     #endif
 
 }
@@ -174,11 +203,7 @@ void loop()
 {
   showImage();
 
-#ifdef Gang3
   myDelay(55000);
-#else
-  delay(55000);  // myDelay für Bewegungsmelder
-#endif  
 }
 
 void showImage() {
@@ -191,18 +216,22 @@ void showImage() {
       sprintf(logString,"Strom?Job=%s&temp=%f", jobname, temp);
   #endif
   #ifdef Gang3
-    float h = dht.readHumidity();
-  // Read temperature as Celsius (the default)
-    float t = dht.readTemperature();
-    sprintf(logString,"Strom?Job=%s&temp=%f&hum=%f&distance=%f", jobname, t, h, LastDistance);
-    // sprintf(logString,"Strom?Job=%s&distance=%f", jobname, LastDistance);
+    #ifndef US100
+        float h = dht.readHumidity();
+      // Read temperature as Celsius (the default)
+        float t = dht.readTemperature();
+        sprintf(logString,"Strom?Job=%s&temp=%f&hum=%f&distance=%f", jobname, t, h, LastDistance);
+        // sprintf(logString,"Strom?Job=%s&distance=%f", jobname, LastDistance);
+    #else
+        sprintf(logString,"Strom?Job=%s&temp=%f&distance=%f", jobname, lastTemp, LastDistance);
+    #endif    
   #endif
   #ifdef Gang2
       sprintf(logString,"Strom?Job=%s", jobname);    
   #endif
 
     
-    showBitmapBufferFrom_HTTP("192.168.0.34", "/4DAction/", logString, 0,0, false);
+  showBitmapBufferFrom_HTTP("192.168.0.34", "/4DAction/", logString, 0,0, false);
 
 }
 
@@ -217,21 +246,21 @@ void myDelay(long thedelay) {
   while ((start+thedelay)>millis()) {
 
     ArduinoOTA.handle();
-
     delay(1);
+
     #ifdef Gang
-    raw = analogRead(A0);
-    BewegAktiv=false;
-    if (raw > 700)
-      BewegAktiv=true;
-    if (BewegAktiv != Bewegung) {
-        Bewegung = BewegAktiv;
-        showPartialUpdate(Bewegung);
-        ReportBewegung(Bewegung, 0);
-    }  
+      raw = analogRead(A0);
+      BewegAktiv=false;
+      if (raw > 700)
+        BewegAktiv=true;
+      if (BewegAktiv != Bewegung) {
+          Bewegung = BewegAktiv;
+          showPartialUpdate(Bewegung);
+          ReportBewegung(Bewegung, 0);
+      }  
     #endif
     #ifdef Gang3
-    
+    #ifndef US100
     raw = GetDistance();
     LastDistance = raw;
 
@@ -252,7 +281,50 @@ void myDelay(long thedelay) {
           //ReportBewegung(Bewegung, (long) raw);
       }  
     }
-    
+    #else      
+      byte data_available;
+      byte msg;
+
+      data_available = us100.data_available();
+
+      if (data_available & DISTANCE) {
+          Serial.print("Distance: ");
+          LastDistance=us100.get_distance() / 10;
+          Serial.println(LastDistance);
+          // Auswertung Bewegung
+              if (LastDistance <80 )
+                BewegAktiv=true;
+              else
+                BewegAktiv=false;
+
+              char error[50];
+              sprintf(error, "%d", (long) LastDistance);
+              //ShowError(error);
+
+              if (BewegAktiv != Bewegung) {
+                //Serial.println(raw);
+                Bewegung = BewegAktiv;
+                showPartialUpdate(Bewegung);
+                //ReportBewegung(Bewegung, (long) raw);
+              }  
+      }
+      if (data_available & TEMPERATURE) {
+          Serial.print("Temperature: ");
+          lastTemp=us100.get_temperature();
+          Serial.println(lastTemp);
+      }
+
+      if (ping_enabled && (millis() >= pingTimer)) {   // pingSpeed milliseconds since last ping, do another ping.
+          pingTimer = millis() + pingSpeed;      // Set the next ping time.
+          us100.request_distance();
+      }
+
+      if (temp_enabled && (millis() >= tempTimer)) {
+          tempTimer = millis() + tempSpeed;
+          us100.request_temperature();
+      }
+
+    #endif
     #endif    
     if (start > millis()) {
       start = 0;  // overflow
@@ -267,6 +339,8 @@ float GetDistance() {
   short counter = 0;
   const short samples = 30;
   float collection[samples];
+
+  #ifndef US100
   
   while (counter<samples) {
       digitalWrite(trigPin, LOW);
@@ -307,6 +381,7 @@ float GetDistance() {
   if (counter == 0) counter = 1;
   result = duration / counter;
 
+  #endif
   return result;
 
 }
@@ -342,8 +417,9 @@ void ShowError(char *HelloWorld)
   display.firstPage();
   display.fillScreen(GxEPD_WHITE);
   display.setCursor(55, 10);
+
   display.print(HelloWorld);
-  
+
   while (display.nextPage());
   //Serial.println("helloWorld done");
 
@@ -368,23 +444,21 @@ void showPartialUpdate(bool Bewegung)
   uint16_t box_y = 5;
   uint16_t box_w = 15;
   uint16_t box_h = 15;
-  uint16_t cursor_y = box_y + box_h - 6;
-  float value = 13.95;
-  uint16_t incr = display.epd2.hasFastPartialUpdate ? 1 : 3;
   display.setFont(&FreeMonoBold9pt7b);
   display.setTextColor(GxEPD_BLACK);
 
-    display.setPartialWindow(box_x, box_y, box_w, box_h);
     display.firstPage();
-    do
-    {
+    display.setPartialWindow(box_x, box_y, box_w, box_h);
+
+    do {
+
       if (Bewegung)
         display.fillRect(box_x, box_y, box_w, box_h, GxEPD_BLACK);
       else
         display.fillRect(box_x, box_y, box_w, box_h, GxEPD_WHITE);  
     }
     while (display.nextPage());
-  
+    //display.powerOff();
 }
 
 // not called for Gang2
@@ -636,6 +710,7 @@ void showBitmapBufferFrom_HTTP(const char* host, const char* path, const char* f
         Serial.println(" ms");
 
         //display.refresh();
+        display.firstPage();
 
         if (RedrawCounter++ > 15) {
              display.setFullWindow();
@@ -644,7 +719,7 @@ void showBitmapBufferFrom_HTTP(const char* host, const char* path, const char* f
         else
           display.setPartialWindow(0, 0, display.width(), display.height());
 
-        display.firstPage();
+
       do
       {
         display.fillScreen(GxEPD_BLACK);
