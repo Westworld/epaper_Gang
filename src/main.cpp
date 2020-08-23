@@ -304,8 +304,8 @@ void myDelay(long thedelay) {
               if (BewegAktiv != Bewegung) {
                 //Serial.println(raw);
                 Bewegung = BewegAktiv;
-                showPartialUpdate(Bewegung);
-                //ReportBewegung(Bewegung, (long) raw);
+                //showPartialUpdate(Bewegung);
+                ReportBewegung(Bewegung, (long) LastDistance);
               }  
       }
       if (data_available & TEMPERATURE) {
@@ -444,21 +444,21 @@ void showPartialUpdate(bool Bewegung)
   uint16_t box_y = 5;
   uint16_t box_w = 15;
   uint16_t box_h = 15;
+    uint16_t incr = display.epd2.hasFastPartialUpdate ? 1 : 3;
   display.setFont(&FreeMonoBold9pt7b);
   display.setTextColor(GxEPD_BLACK);
 
+  display.setPartialWindow(box_x, box_y, box_w, box_h);
     display.firstPage();
-    display.setPartialWindow(box_x, box_y, box_w, box_h);
-
-    do {
-
+    do
+    {
       if (Bewegung)
         display.fillRect(box_x, box_y, box_w, box_h, GxEPD_BLACK);
       else
         display.fillRect(box_x, box_y, box_w, box_h, GxEPD_WHITE);  
     }
     while (display.nextPage());
-    //display.powerOff();
+
 }
 
 // not called for Gang2
@@ -710,16 +710,16 @@ void showBitmapBufferFrom_HTTP(const char* host, const char* path, const char* f
         Serial.println(" ms");
 
         //display.refresh();
-        display.firstPage();
+;
 
-        if (RedrawCounter++ > 15) {
+        if (RedrawCounter++ > 15) {  // war 15;
              display.setFullWindow();
              RedrawCounter = 0;
         }
         else
           display.setPartialWindow(0, 0, display.width(), display.height());
 
-
+      display.firstPage();
       do
       {
         display.fillScreen(GxEPD_BLACK);
