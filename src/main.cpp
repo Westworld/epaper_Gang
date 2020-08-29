@@ -288,9 +288,13 @@ void myDelay(long thedelay) {
       data_available = us100.data_available();
 
       if (data_available & DISTANCE) {
-          Serial.print("Distance: ");
-          LastDistance=us100.get_distance() / 10;
-          Serial.println(LastDistance);
+
+          float CurDistance=us100.get_distance() / 10;
+          if (LastDistance != CurDistance) {
+            Serial.print("Distance: ");
+            Serial.println(CurDistance);
+            LastDistance = CurDistance;
+          }
           // Auswertung Bewegung
               if (LastDistance <80 )
                 BewegAktiv=true;
@@ -503,7 +507,7 @@ void showBitmapBufferFrom_HTTP(const char* host, const char* path, const char* f
                "User-Agent: GxEPD2_Spiffs_Loader\r\n" +
                "Connection: close\r\n\r\n");
   Serial.println("request sent");
-  delay(3000);
+  myDelay(3000);
   if ((x >= display.width()) || (y >= display.height())) return;
   while (client.connected())
   {
@@ -542,6 +546,7 @@ void showBitmapBufferFrom_HTTP(const char* host, const char* path, const char* f
     uint32_t bytes_read = 7 * 4 + 3 * 2; // read so far
     if ((planes == 1) && ((format == 0) || (format == 3))) // uncompressed is handled, 565 also
     {
+      myDelay(1);
       Serial.print("File size: "); Serial.println(fileSize);
       Serial.print("Image Offset: "); Serial.println(imageOffset);
       Serial.print("Header size: "); Serial.println(headerSize);
@@ -599,7 +604,7 @@ void showBitmapBufferFrom_HTTP(const char* host, const char* path, const char* f
         for (uint16_t row = 0; row < h; row++, rowPosition += rowSize) // for each line
         {
           if (!connection_ok || !client.connected()) break;
-          delay(1); // yield() to avoid WDT
+          myDelay(1); // yield() to avoid WDT
           uint32_t in_remain = rowSize;
           uint32_t in_idx = 0;
           uint32_t in_bytes = 0;
