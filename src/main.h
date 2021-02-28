@@ -13,3 +13,4 @@ void ShowError(char *HelloWorld);
 void ReportBewegung(short Bewegung, long distance);
 void showPartialUpdate(bool Bewegung);
 float GetDistance(void);
+void SendMessage(short Message);

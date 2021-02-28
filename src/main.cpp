@@ -35,7 +35,7 @@ oder Gang3 1  // für gang mit temp und ultraschall HC-SR204
 
  */
 
-#define Gang3 1
+#define Gang2 1
 #define US100 1
 // to switch from trigger to serial
 #include <Arduino.h>
@@ -63,6 +63,7 @@ OneWire oneWire(ONE_WIRE_BUS);
 // Pass our oneWire reference to Dallas Temperature. 
 DallasTemperature sensors(&oneWire);
 #endif
+
 #ifdef Gang2
 GxEPD2_BW<GxEPD2_420, GxEPD2_420::HEIGHT> display(GxEPD2_420(/*CS=D8*/ D1, /*DC=D3*/ D3, /*RST=D4*/ D4, /*BUSY=D2*/ D2));
 const char* wifihostname = "ESP_Epaper2";
@@ -232,7 +233,7 @@ void showImage() {
 
     
   showBitmapBufferFrom_HTTP("192.168.0.34", "/4DAction/", logString, 0,0, false);
-
+SendMessage(1);
 }
 
 
@@ -296,26 +297,26 @@ void myDelay(long thedelay) {
             LastDistance = CurDistance;
           }
           // Auswertung Bewegung
-              if (LastDistance <80 )
+              if (LastDistance <70 )
                 BewegAktiv=true;
               else
                 BewegAktiv=false;
 
-              char error[50];
-              sprintf(error, "%d", (long) LastDistance);
+              //char error[50];
+              //sprintf(error, "%d", (long) LastDistance);
               //ShowError(error);
 
               if (BewegAktiv != Bewegung) {
                 //Serial.println(raw);
                 Bewegung = BewegAktiv;
                 //showPartialUpdate(Bewegung);
-                ReportBewegung(Bewegung, (long) LastDistance);
+                // ReportBewegung(Bewegung, (long) LastDistance);
               }  
       }
       if (data_available & TEMPERATURE) {
-          Serial.print("Temperature: ");
+          //Serial.print("Temperature: ");
           lastTemp=us100.get_temperature();
-          Serial.println(lastTemp);
+          //Serial.println(lastTemp);
       }
 
       if (ping_enabled && (millis() >= pingTimer)) {   // pingSpeed milliseconds since last ping, do another ping.
@@ -465,11 +466,48 @@ void showPartialUpdate(bool Bewegung)
 
 }
 
+
+void SendMessage(short Message) {
+  char logString[64];
+  WiFiClient client;
+  bool connection_ok = false;
+
+  
+  sprintf(logString,"/4DAction/Strom?Job=Alert&Message=%d", Message);
+  Serial.println(logString);
+
+  if (!client.connect("192.168.0.34", httpPort))
+  {
+    Serial.println("connection failed");
+    return;
+  }
+  client.print(String("GET ") + logString + " HTTP/1.1\r\n" +
+               "Host: " + "192.168.0.34" + "\r\n" +
+               "User-Agent: GxEPD2_Spiffs_Loader\r\n" +
+               "Connection: close\r\n\r\n");
+               
+
+/*
+  if (!client.connect("192.168.0.83", 80))
+  {
+    Serial.println("connection failed");
+    return;
+  }
+  client.print(String("GET /1?t=240") + " HTTP/1.1\r\n" +
+               "Host: " + "192.168.0.83" + "\r\n" +
+               "User-Agent: GxEPD2_Spiffs_Loader\r\n" +
+               "Connection: close\r\n\r\n");    
+*/
+}
+
+
 // not called for Gang2
 void ReportBewegung(short Bewegung, long distance) {
   char logString[64];
   WiFiClient client;
   bool connection_ok = false;
+
+  
   sprintf(logString,"/4DAction/Strom?Job=GangBewegung&Bewegung=%d&distance=%d", Bewegung, distance);
   Serial.println(logString);
 
@@ -482,7 +520,19 @@ void ReportBewegung(short Bewegung, long distance) {
                "Host: " + "192.168.0.34" + "\r\n" +
                "User-Agent: GxEPD2_Spiffs_Loader\r\n" +
                "Connection: close\r\n\r\n");
+               
 
+/*
+  if (!client.connect("192.168.0.83", 80))
+  {
+    Serial.println("connection failed");
+    return;
+  }
+  client.print(String("GET /1?t=240") + " HTTP/1.1\r\n" +
+               "Host: " + "192.168.0.83" + "\r\n" +
+               "User-Agent: GxEPD2_Spiffs_Loader\r\n" +
+               "Connection: close\r\n\r\n");    
+*/
 }
 
 void showBitmapBufferFrom_HTTP(const char* host, const char* path, const char* filename, int16_t x, int16_t y, bool with_color)
