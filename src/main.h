@@ -14,3 +14,4 @@ void ReportBewegung(short Bewegung, long distance);
 void showPartialUpdate(bool Bewegung);
 float GetDistance(void);
 void SendMessage(short Message);
+unsigned char reverse(unsigned char b);

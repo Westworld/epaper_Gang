@@ -34,8 +34,8 @@ oder
 oder Gang3 1  // für gang mit temp und ultraschall HC-SR204
 
  */
-
-#define Gang2 1
+//#define UseBitmap 1
+#define Gang3 1
 #define US100 1
 // to switch from trigger to serial
 #include <Arduino.h>
@@ -431,6 +431,7 @@ void ShowError(char *HelloWorld)
   display.powerOff();
 }
 
+#ifdef UseBitmap
 static const uint16_t input_buffer_pixels = 640; // may affect performance
 
 static const uint16_t max_row_width = 640; // for up to 7.5" display
@@ -441,7 +442,7 @@ uint8_t output_row_mono_buffer[max_row_width / 8]; // buffer for at least one ro
 uint8_t output_row_color_buffer[max_row_width / 8]; // buffer for at least one row of color bits
 uint8_t mono_palette_buffer[max_palette_pixels / 8]; // palette buffer for depth <= 8 b/w
 uint8_t color_palette_buffer[max_palette_pixels / 8]; // palette buffer for depth <= 8 c/w
-
+#endif
 
 void showPartialUpdate(bool Bewegung)
 {
@@ -535,6 +536,108 @@ void ReportBewegung(short Bewegung, long distance) {
 */
 }
 
+unsigned char reverse(unsigned char b) {
+   b = (b & 0xF0) >> 4 | (b & 0x0F) << 4;
+   b = (b & 0xCC) >> 2 | (b & 0x33) << 2;
+   b = (b & 0xAA) >> 1 | (b & 0x55) << 1;
+   return b;
+}
+
+#ifndef UseBitmap
+// using raw bytes
+
+void showBitmapBufferFrom_HTTP(const char* host, const char* path, const char* filename, int16_t x, int16_t y, bool with_color)
+{
+  display.setRotation(0);
+  WiFiClient client;
+  bool connection_ok = false;
+  bool valid = false; // valid format to be handled
+  bool flip = true; // bitmap is stored bottom-to-top
+  uint32_t startTime = millis();
+  Serial.println(); Serial.print("downloading file \""); Serial.print(filename);  Serial.println("\"");
+  Serial.print("connecting to "); Serial.println(host);
+  if (!client.connect(host, httpPort))
+  {
+    Serial.println("connection failed");
+    return;
+  }
+  Serial.print("requesting URL: ");
+  Serial.println(String("http://") + host + path + filename);
+  client.print(String("GET ") + path + filename + " HTTP/1.1\r\n" +
+               "Host: " + host + "\r\n" +
+               "User-Agent: GxEPD2_Spiffs_Loader\r\n" +
+               "Connection: close\r\n\r\n");
+  Serial.println("request sent");
+  myDelay(3000);
+  if ((x >= display.width()) || (y >= display.height())) return;
+  while (client.connected())
+  {
+    String line = client.readStringUntil('\n');
+    if (!connection_ok)
+    {
+      connection_ok = line.startsWith("HTTP/1.1 200 OK");
+      if (connection_ok) Serial.println(line);
+    }
+    if (!connection_ok) Serial.println(line);
+    if (line == "\r")
+    {
+      Serial.println("headers received");
+      break;
+    }
+  }
+
+  // data received
+  //Serial.println("data received");
+  if (!connection_ok) return;
+
+  uint32_t bytes_read = 0;
+  if (!connection_ok || !client.connected()) return;
+  myDelay(1); // yield() to avoid WDT
+
+  uint32_t get = 15000;
+  uint32_t got = read(client, bmpbuffer, get);
+
+  if (got != 15000) {
+    Serial.print("wrong length received "); Serial.println(got);
+    char message[100];
+    sprintf(message,"Wrong length %d",got);
+    ReportError(message);
+    return;
+  }
+
+  for (uint32_t i=0; i< get; i++)
+    bmpbuffer[i] = ~reverse(bmpbuffer[i]);  // invert
+
+  myDelay(1);  
+
+  Serial.print("bytes read "); Serial.println(got);
+  Serial.print("downloaded in ");
+  Serial.print(millis() - startTime);
+  Serial.println(" ms");
+
+  //RedrawCounter = 20;
+
+  if (RedrawCounter++ > 15) {  // war 15;
+      display.setFullWindow();
+      RedrawCounter = 0;
+  }
+  else
+    display.setPartialWindow(0, 0, display.width(), display.height());
+
+  display.firstPage();
+  do
+  {
+        display.fillScreen(GxEPD_BLACK);
+        display.drawBitmap(0, 0, bmpbuffer, display.width(), display.height(), GxEPD_WHITE);
+        myDelay(1);
+  }
+  while (display.nextPage());
+
+  display.powerOff();
+}
+
+
+#else  // using bmp
 void showBitmapBufferFrom_HTTP(const char* host, const char* path, const char* filename, int16_t x, int16_t y, bool with_color)
 {
   display.setRotation(0);
@@ -799,7 +902,9 @@ void showBitmapBufferFrom_HTTP(const char* host, const char* path, const char* f
     ReportError("bitmap format not handled.");
   }
   display.powerOff();
+  client.end();
 }
+#endif
 
 void ReportError(char *errormessage) {
   Serial.println(errormessage);
@@ -855,7 +960,9 @@ uint32_t read(WiFiClient& client, uint8_t* buffer, int32_t bytes)
       *buffer++ = uint8_t(v);
       remain--;
     }
-    else delay(1);
+    else 
+      myDelay(1);
+
     if (millis() - start > 5000) {
       Serial.println("Stop because timeout "); 
       break; // don't hang forever
@@ -863,7 +970,7 @@ uint32_t read(WiFiClient& client, uint8_t* buffer, int32_t bytes)
   }
 
   if (remain > 0) {
-      Serial.print("remain handling: "); Serial.println(remain);
+      //Serial.print("remain handling: "); Serial.println(remain);
       while (client.available() && (remain > 0)) {
         int16_t v = client.read();
         *buffer++ = uint8_t(v);
